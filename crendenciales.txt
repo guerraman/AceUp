@@ -1,0 +1,12 @@
+cd backend
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+& "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+
+
+cd frontend
+npm run dev
+
+odservaciones :
+
+1 caso que no me deje el casi doblar una apuesta que el sofware me de una opcion para notificar eso y en base a eso tomar una decision 
+2. al momento de dividir no me sale una recomendacion clara de que hacer en los 2 masos 
