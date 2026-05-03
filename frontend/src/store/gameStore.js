@@ -3,6 +3,10 @@ import API from '../api/client'
 
 export const useGameStore = create((set, get) => ({
   sessionId: null,
+  aiStatus: null,
+  aiRecommendation: null,
+  aiEnabled: true,
+  lastHandResult: null,
   playerCards: [],
   dealerCard: null,
   splitHands: [[], []],
@@ -180,4 +184,57 @@ export const useGameStore = create((set, get) => ({
   setBankroll: (amount) => set({ bankroll: amount }),
   setMinBet: (amount) => set({ minBet: amount }),
   clearError: () => set({ error: null }),
+
+  fetchAIStatus: async () => {
+    try {
+      const { data } = await API.get('/ai/status')
+      set({ aiStatus: data })
+    } catch (e) { /* silencioso */ }
+  },
+
+  fetchAIRecommendation: async () => {
+    const { sessionId, playerCards, dealerCard, bankroll, minBet, aiEnabled } = get()
+    if (!aiEnabled || playerCards.length < 2 || !dealerCard) return
+
+    try {
+      const { data } = await API.post('/ai/recommend', {
+        player_cards: playerCards,
+        dealer_card:  dealerCard,
+        session_id:   sessionId,
+        bankroll,
+        min_bet: minBet,
+      })
+      set({ aiRecommendation: data })
+    } catch (e) { /* silencioso, fallback a estrategia básica */ }
+  },
+
+  reportHandResult: async (actionTaken, reward) => {
+    const { sessionId, playerCards, dealerCard, trueCount } = get()
+    if (!playerCards.length || !dealerCard) return
+
+    try {
+      await API.post('/ai/learn', {
+        session_id:   sessionId,
+        player_cards: playerCards,
+        dealer_card:  dealerCard,
+        true_count:   trueCount,
+        action_taken: actionTaken,
+        reward,
+      })
+    } catch (e) { /* silencioso */ }
+  },
+
+  triggerTraining: async (nHands = 50000) => {
+    await API.post(`/ai/train?n_hands=${nHands}`)
+    const poll = setInterval(async () => {
+      await get().fetchAIStatus()
+      const s = get().aiStatus
+      if (s && s.total_hands > 0) {
+        set({ aiStatus: s })
+      }
+    }, 3000)
+    setTimeout(() => clearInterval(poll), 120_000)
+  },
+
+  toggleAI: () => set(s => ({ aiEnabled: !s.aiEnabled })),
 }))

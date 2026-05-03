@@ -10,3 +10,4 @@ odservaciones :
 
 1 caso que no me deje el casi doblar una apuesta que el sofware me de una opcion para notificar eso y en base a eso tomar una decision 
 2. al momento de dividir no me sale una recomendacion clara de que hacer en los 2 masos 
+3 cuando me diga rendirse tambien me de una opcion en caso que no exita el boton rendirse

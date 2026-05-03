@@ -5,25 +5,42 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: aceup-backend
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      - ai_data:/app/data
     environment:
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - aceup-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000/api/v1
+    container_name: aceup-frontend
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev -- --host
-    environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
+      - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - aceup-network
+
+networks:
+  aceup-network:
+    driver: bridge
+
+volumes:
+  ai_data:
+    driver: local

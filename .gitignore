@@ -24,3 +24,6 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+backend/data/
+backend/data/q_table.json

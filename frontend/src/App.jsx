@@ -8,13 +8,15 @@ import { ShoeBar } from './components/ShoeBar'
 import { BetAdvisor } from './components/BetAdvisor'
 import { InsuranceBox } from './components/InsuranceBox'
 import { SplitManager } from './components/SplitManager'
+import { AIAdvisor } from './components/AIAdvisor'
 import './index.css'
 
 function App() {
   const {
     initSession, sessionId, nextHand, finishGame,
     bankroll, setBankroll, minBet, setMinBet,
-    error, clearError
+    error, clearError,
+    playerCards, dealerCard, fetchAIRecommendation
   } = useGameStore()
 
   const [showSettings, setShowSettings] = useState(false)
@@ -22,6 +24,10 @@ function App() {
   useEffect(() => {
     initSession()
   }, [])
+
+  useEffect(() => {
+    fetchAIRecommendation()
+  }, [playerCards, dealerCard])
 
   return (
     <div className="min-h-screen">
@@ -132,6 +138,7 @@ function App() {
           <div className="lg:col-span-6 space-y-5">
             <HandDisplay />
             <SplitManager />
+            <AIAdvisor />
             <ActionBox />
             <InsuranceBox />
             <CardPicker />

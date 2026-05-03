@@ -182,3 +182,113 @@ def _color(action: str) -> str:
         "H": "hit", "S": "stand", "D": "double",
         "Ds": "double", "P": "split", "R": "surrender",
     }.get(action, "idle")
+
+from core.ai_engine import ai_engine
+from fastapi import BackgroundTasks
+
+# Modelo para registrar resultado de mano real
+class HandResult(BaseModel):
+    session_id: str
+    player_cards: list[str]
+    dealer_card: str
+    true_count: float
+    action_taken: str           # La acción que realmente ejecutó el jugador
+    reward: float               # +1 ganó, -1 perdió, 0 empate, +1.5 BJ
+
+
+@router.post("/ai/recommend")
+def ai_recommend(req: StrategyRequest):
+    """
+    Recomendación combinada: estrategia básica + I18 + Q-Learning.
+    Retorna la sugerencia de la IA junto con su confianza y valores Q.
+    """
+    s = sessions.get(req.session_id)
+    if not s:
+        raise HTTPException(404, "Sesión no encontrada")
+
+    shoe = s["shoe"]
+    tc   = shoe.true_count
+
+    # 1. Calcular acción base (strategy.py + deviations.py)
+    from core.strategy   import get_basic_strategy
+    from core.deviations import apply_deviations
+    from core.counter    import hand_value, is_soft, is_pair, dealer_up_value
+
+    basic_action, _ = get_basic_strategy(req.player_cards, req.dealer_card)
+    dv   = dealer_up_value(req.dealer_card)
+    pv   = hand_value(req.player_cards)
+    soft = is_soft(req.player_cards)
+    pair = is_pair(req.player_cards)
+    dev_action, dev_reason = apply_deviations(
+        basic_action, req.player_cards, req.dealer_card, tc, pv, dv, soft, pair
+    )
+
+    # 2. Consultar IA
+    ai_rec = ai_engine.recommend(
+        player_cards  = req.player_cards,
+        dealer_card   = req.dealer_card,
+        true_count    = tc,
+        basic_action  = dev_action,
+    )
+
+    return {
+        "final_action":  ai_rec["action"],
+        "base_action":   dev_action,
+        "base_reason":   dev_reason,
+        "q_override":    ai_rec["q_override"],
+        "q_values":      ai_rec["q_values"],
+        "confidence":    ai_rec["confidence"],
+        "ai_stats": {
+            "total_hands": ai_rec["total_hands"],
+            "win_rate":    ai_rec["win_rate"],
+            "state_count": ai_rec["state_count"],
+        }
+    }
+
+
+@router.post("/ai/learn")
+def ai_learn_from_hand(result: HandResult):
+    """
+    Registra el resultado de una mano real para aprendizaje online.
+    Llamar DESPUÉS de que la mano termine y se sepa el resultado.
+    """
+    ai_engine.update_from_real_hand(
+        player_cards = result.player_cards,
+        dealer_card  = result.dealer_card,
+        true_count   = result.true_count,
+        action_taken = result.action_taken,
+        reward       = result.reward,
+    )
+    # Guardar cada 100 manos reales
+    if (ai_engine.wins + ai_engine.losses) % 100 == 0:
+        ai_engine.save()
+
+    return {"ok": True, "total_hands": ai_engine.total_hands}
+
+
+@router.post("/ai/train")
+async def ai_train(background_tasks: BackgroundTasks, n_hands: int = 50000):
+    """
+    Lanza entrenamiento en background (no bloquea la API).
+    Simula n_hands manos contra el dealer programado S17.
+    Recomendado: llamar una vez al iniciar el servidor.
+    """
+    background_tasks.add_task(_run_training, n_hands)
+    return {"message": f"Entrenamiento de {n_hands} manos iniciado en background"}
+
+
+def _run_training(n_hands: int):
+    result = ai_engine.train(n_hands)
+    print(f"[AI] Entrenamiento completo: {result}")
+
+
+@router.get("/ai/status")
+def ai_status():
+    """Estado actual del motor de IA."""
+    return {
+        "total_hands": ai_engine.total_hands,
+        "win_rate":    ai_engine.win_rate,
+        "state_count": ai_engine.state_count,
+        "epsilon":     round(ai_engine.epsilon, 4),
+        "trained":     ai_engine.total_hands > 5000,
+    }
